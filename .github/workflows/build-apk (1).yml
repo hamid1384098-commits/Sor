@@ -66,11 +66,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
+      # رانرهای ubuntu-latest گیت‌هاب از قبل Android SDK با لایسنس‌های قبول‌شده دارن؛
+      # استفاده از android-actions/setup-android باعث می‌شه بخواد SDK رو از نو دانلود و
+      # لایسنس‌هاشو (به‌صورت غیرتعاملی و ناموفق) دوباره قبول کنه، برای همین حذفش کردیم.
+      - name: Install required Android SDK packages (platform 34)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
