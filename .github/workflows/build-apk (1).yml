@@ -1,0 +1,95 @@
+# .github/workflows/build-apk.yml
+# این فایل رو داخل ریپوت، توی مسیر .github/workflows/build-apk.yml بذار.
+#
+# کاری که می‌کنه:
+#  ۱) ریپو رو checkout می‌کنه
+#  ۲) اگه یه فایل .zip (مثلاً همون RelayTunnel_android_app.zip) توی ریپو باشه، بازش می‌کنه
+#  ۳) پوشه‌ای که build.gradle ماژول app توشه رو پیدا می‌کنه (چه مستقیم توی ریپو باشه چه
+#     داخل زیپ استخراج‌شده، چه توی android/ چه توی ریشه)
+#  ۴) JDK 17 + Android SDK + Gradle رو نصب می‌کنه
+#  ۵) assembleDebug می‌زنه و APK خروجی رو به عنوان Artifact ران آپلود می‌کنه (از تب
+#     Actions همون ران، پایین صفحه، قابل دانلوده)
+#
+# چون امضای release نیاز به keystore داره که نباید توی ریپو عمومی/خصوصی به این شکل
+# دست‌کاری بشه، اینجا فقط APK دیباگ (قابل نصب مستقیم روی گوشی خودت با فعال کردن
+# «نصب از منابع ناشناس») ساخته می‌شه.
+
+name: Build APK
+
+on:
+  push:
+    branches: [ "**" ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract any zip in the repo (e.g. RelayTunnel_android_app.zip)
+        run: |
+          set -e
+          shopt -s nullglob globstar
+          found_zip=0
+          for z in *.zip **/*.zip; do
+            [ -f "$z" ] || continue
+            echo "Extracting $z"
+            mkdir -p _extracted
+            unzip -o -q "$z" -d _extracted
+            found_zip=1
+          done
+          if [ "$found_zip" = "1" ]; then
+            echo "Extracted into _extracted/"
+            find _extracted -maxdepth 3 -type d
+          else
+            echo "No zip found in repo; assuming project files are already checked in as-is."
+          fi
+
+      - name: Locate Android project directory (the one containing app/build.gradle)
+        id: find
+        run: |
+          set -e
+          candidate=$(find . -maxdepth 6 -type f -path '*/app/build.gradle' ! -path '*/_extracted/*/_extracted/*' | head -n1)
+          if [ -z "$candidate" ]; then
+            echo "::error::app/build.gradle پیدا نشد؛ ساختار ریپو یا زیپ را چک کن."
+            exit 1
+          fi
+          proj_dir=$(dirname "$(dirname "$candidate")")
+          echo "Found project at: $proj_dir"
+          echo "project_dir=$proj_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # پروژه gradlew (wrapper) نداره، پس باید صریحاً نسخه‌ی gradle رو بخوایم
+          # وگرنه این اکشن فقط wrapper رو cache می‌کنه و دستور gradle رو نصب نمی‌کنه
+          # (ارور معروفش: "gradle: command not found")
+          gradle-version: "8.7"
+
+      - name: Verify gradle is on PATH
+        run: gradle --version
+
+      - name: Build debug APK
+        working-directory: ${{ steps.find.outputs.project_dir }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: ${{ steps.find.outputs.project_dir }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
