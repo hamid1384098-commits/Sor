@@ -66,14 +66,24 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # رانرهای ubuntu-latest گیت‌هاب از قبل Android SDK با لایسنس‌های قبول‌شده دارن؛
-      # استفاده از android-actions/setup-android باعث می‌شه بخواد SDK رو از نو دانلود و
-      # لایسنس‌هاشو (به‌صورت غیرتعاملی و ناموفق) دوباره قبول کنه، برای همین حذفش کردیم.
+      # sdkmanager روی PATH نیست؛ باید با مسیر کامل صداش بزنیم
       - name: Install required Android SDK packages (platform 34)
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          SDKM=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n1)
+          if [ -z "$SDKM" ]; then
+            echo "::error::sdkmanager not found under $ANDROID_HOME/cmdline-tools"
+            exit 1
+          fi
+          echo "Using $SDKM"
+          set +o pipefail
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      # Chaquopy (پایتون داخل اپ) موقع build به پایتون 3.11 روی سیستم نیاز داره
+      - name: Set up Python 3.11 (for Chaquopy)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
