@@ -77,7 +77,7 @@ jobs:
           echo "Using $SDKM"
           set +o pipefail
           yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-          "$SDKM" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          "$SDKM" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.1.10909125"
 
       # Chaquopy (پایتون داخل اپ) موقع build به پایتون 3.11 روی سیستم نیاز داره
       - name: Set up Python 3.11 (for Chaquopy)
